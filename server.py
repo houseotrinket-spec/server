@@ -28,12 +28,12 @@
  *   D  Title
  *   E  Description
  *   F  Facebook URL
- *   G  Media URL        ← Dropbox direct-download URL
- *   H  Discord Status   ← PENDING - COMPRESSING - result
- *   I  Vimeo URL        ← populated by Script 1
+ *   G  Media URL        - Dropbox direct-download URL
+ *   H  Discord Status   - PENDING - COMPRESSING - result
+ *   I  Vimeo URL        - populated by Script 1
  *   J  FB Post Date
  *   K  Feed Name
- *   L  Compress Job ID  ← written here while FFmpeg runs on the worker
+ *   L  Compress Job ID  - written here while FFmpeg runs on the worker
  *************************************************/
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
