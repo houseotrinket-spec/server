@@ -7,14 +7,14 @@
  *
  * Processing priority:
  *   PENDING rows:
- *     1. POST mediaUrl to /compress/start → get job_id back instantly
- *     2. Write job_id to col L, set status → COMPRESSING
+ *     1. POST mediaUrl to /compress/start - get job_id back instantly
+ *     2. Write job_id to col L, set status - COMPRESSING
  *
  *   COMPRESSING rows (next trigger run):
  *     1. GET /compress/result/<job_id>
- *        202 → still running, leave as COMPRESSING for next run
- *        200 → compressed bytes ready → post to Discord as attachment
- *        404/500 → compression failed → fall back to Vimeo (col I)
+ *        202 - still running, leave as COMPRESSING for next run
+ *        200 - compressed bytes ready - post to Discord as attachment
+ *        404/500 - compression failed - fall back to Vimeo (col I)
  *
  *   Discord posting priority:
  *     PRIMARY:   styled embed + compressed video attachment (≤ 8 MB)
@@ -29,7 +29,7 @@
  *   E  Description
  *   F  Facebook URL
  *   G  Media URL        ← Dropbox direct-download URL
- *   H  Discord Status   ← PENDING → COMPRESSING → result
+ *   H  Discord Status   ← PENDING - COMPRESSING - result
  *   I  Vimeo URL        ← populated by Script 1
  *   J  FB Post Date
  *   K  Feed Name
