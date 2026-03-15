@@ -17,7 +17,7 @@
  *        404/500 - compression failed - fall back to Vimeo (col I)
  *
  *   Discord posting priority:
- *     PRIMARY:   styled embed + compressed video attachment (≤ 8 MB)
+ *     PRIMARY:   styled embed + compressed video attachment (- 8 MB)
  *     FALLBACK:  Vimeo URL from col I (written by Script 1)
  *     LAST RESORT: plain embed with Dropbox link
  *
