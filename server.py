@@ -1,5 +1,5 @@
 /*************************************************
- * Facebook Video Processor — Script 2
+ * Facebook Video Processor - Script 2
  *
  * Set a time-based trigger: every 30 minutes.
  *
@@ -94,22 +94,22 @@ const FEEDS = [
 ];
 
 // ── Column indices (0-based) ──────────────────────────────────────────────────
-const COL_FEED         = 1;   // B — page slug
+const COL_FEED         = 1;   // B - page slug
 const COL_TYPE         = 2;   // C
 const COL_TITLE        = 3;   // D
 const COL_DESC         = 4;   // E
 const COL_FB_URL       = 5;   // F
-const COL_MEDIA        = 6;   // G — Dropbox URL
+const COL_MEDIA        = 6;   // G - Dropbox URL
 const COL_STATUS       = 7;   // H
-const COL_VIMEO        = 8;   // I — Vimeo URL (written by Script 1)
+const COL_VIMEO        = 8;   // I - Vimeo URL (written by Script 1)
 const COL_FB_POST_DATE = 9;   // J
 const COL_FEED_NAME    = 10;  // K
-const COL_JOB_ID       = 11;  // L — compress job ID (new)
+const COL_JOB_ID       = 11;  // L - compress job ID (new)
 
 // ─── MAIN ENTRY ───────────────────────────────────────────────────────────────
 
 /**
- * Single entry point — handles both PENDING and COMPRESSING rows.
+ * Single entry point - handles both PENDING and COMPRESSING rows.
  * Set a time trigger on this function: every 30 minutes.
  */
 function processVideoQueue() {
@@ -153,21 +153,21 @@ function processVideoQueue() {
     processed++;
   }
 
-  Logger.log(`\n=== processVideoQueue() complete — processed ${processed} row(s) ===`);
+  Logger.log(`\n=== processVideoQueue() complete - processed ${processed} row(s) ===`);
 }
 
 // ─── PENDING ROW: kick off compression job ────────────────────────────────────
 
 function processPendingRow(sheet, sheetRow, feedSlug, feedName, title, desc, fbUrl, mediaUrl, vimeoUrl, fbPostDate) {
-  // Resolve source URL — prefer Dropbox, fall back to yt-dlp worker
+  // Resolve source URL - prefer Dropbox, fall back to yt-dlp worker
   let sourceUrl = mediaUrl || null;
   if (!sourceUrl && YTDLP_WORKER_URL && fbUrl) {
-    Logger.log(`[${feedSlug}] No media URL — trying yt-dlp worker`);
+    Logger.log(`[${feedSlug}] No media URL - trying yt-dlp worker`);
     sourceUrl = fetchVideoUrlFromWorker(fbUrl);
   }
 
   if (!sourceUrl) {
-    Logger.log(`[${feedSlug}] No source URL — falling back to Vimeo immediately`);
+    Logger.log(`[${feedSlug}] No source URL - falling back to Vimeo immediately`);
     sheet.getRange(sheetRow, COL_STATUS + 1).setValue("IN PROGRESS");
     SpreadsheetApp.flush();
     const result = postVimeoOrFallback(feedSlug, feedName, title, desc, fbUrl, mediaUrl, vimeoUrl, fbPostDate);
@@ -177,7 +177,7 @@ function processPendingRow(sheet, sheetRow, feedSlug, feedName, title, desc, fbU
     return;
   }
 
-  // Fire off /compress/start — returns job_id instantly, no timeout risk
+  // Fire off /compress/start - returns job_id instantly, no timeout risk
   Logger.log(`[${feedSlug}] POST /compress/start: ${sourceUrl.substring(0, 80)}...`);
   try {
     const resp = UrlFetchApp.fetch(YTDLP_WORKER_URL + "/compress/start", {
@@ -197,8 +197,8 @@ function processPendingRow(sheet, sheetRow, feedSlug, feedName, title, desc, fbU
       sheet.getRange(sheetRow, COL_JOB_ID + 1).setValue(jobId);
       SpreadsheetApp.flush();
     } else {
-      // Worker refused to start — go straight to Vimeo fallback
-      Logger.log(`[${feedSlug}] /compress/start failed (${code}) — falling back to Vimeo`);
+      // Worker refused to start - go straight to Vimeo fallback
+      Logger.log(`[${feedSlug}] /compress/start failed (${code}) - falling back to Vimeo`);
       sheet.getRange(sheetRow, COL_STATUS + 1).setValue("IN PROGRESS");
       SpreadsheetApp.flush();
       const result = postVimeoOrFallback(feedSlug, feedName, title, desc, fbUrl, mediaUrl, vimeoUrl, fbPostDate);
@@ -221,7 +221,7 @@ function processPendingRow(sheet, sheetRow, feedSlug, feedName, title, desc, fbU
 
 function processCompressingRow(sheet, sheetRow, feedSlug, feedName, title, desc, fbUrl, mediaUrl, vimeoUrl, jobId, fbPostDate) {
   if (!jobId) {
-    Logger.log(`[${feedSlug}] COMPRESSING but no job_id — treating as failed`);
+    Logger.log(`[${feedSlug}] COMPRESSING but no job_id - treating as failed`);
     const result = postVimeoOrFallback(feedSlug, feedName, title, desc, fbUrl, mediaUrl, vimeoUrl, fbPostDate);
     sheet.getRange(sheetRow, COL_STATUS + 1).setValue(result.status);
     if (result.vimeoUrl) sheet.getRange(sheetRow, COL_VIMEO + 1).setValue(result.vimeoUrl);
@@ -239,8 +239,8 @@ function processCompressingRow(sheet, sheetRow, feedSlug, feedName, title, desc,
     Logger.log(`[${feedSlug}] /compress/result response: ${code}`);
 
     if (code === 202) {
-      // Still processing — leave as COMPRESSING, try again next run
-      Logger.log(`[${feedSlug}] Still compressing — will retry next run`);
+      // Still processing - leave as COMPRESSING, try again next run
+      Logger.log(`[${feedSlug}] Still compressing - will retry next run`);
       return;
     }
 
@@ -251,7 +251,7 @@ function processCompressingRow(sheet, sheetRow, feedSlug, feedName, title, desc,
 
       const feed = resolveFeed(feedSlug, feedName);
       if (!feed) {
-        sheet.getRange(sheetRow, COL_STATUS + 1).setValue("FAILED — no feed match");
+        sheet.getRange(sheetRow, COL_STATUS + 1).setValue("FAILED - no feed match");
         SpreadsheetApp.flush();
         return;
       }
@@ -266,12 +266,12 @@ function processCompressingRow(sheet, sheetRow, feedSlug, feedName, title, desc,
           SpreadsheetApp.flush();
           return;
         }
-        Logger.log(`[${feedSlug}] Attachment failed (${discordCode}) — falling back to Vimeo`);
+        Logger.log(`[${feedSlug}] Attachment failed (${discordCode}) - falling back to Vimeo`);
       } else {
-        Logger.log(`[${feedSlug}] Compressed file still too large (${(videoBytes.length/1024/1024).toFixed(2)} MB) — falling back to Vimeo`);
+        Logger.log(`[${feedSlug}] Compressed file still too large (${(videoBytes.length/1024/1024).toFixed(2)} MB) - falling back to Vimeo`);
       }
 
-      // Compressed bytes exist but too large or Discord rejected — fall back
+      // Compressed bytes exist but too large or Discord rejected - fall back
       const result = postVimeoOrFallback(feedSlug, feedName, title, desc, fbUrl, mediaUrl, vimeoUrl, fbPostDate);
       sheet.getRange(sheetRow, COL_STATUS + 1).setValue(result.status);
       if (result.vimeoUrl) sheet.getRange(sheetRow, COL_VIMEO + 1).setValue(result.vimeoUrl);
@@ -279,8 +279,8 @@ function processCompressingRow(sheet, sheetRow, feedSlug, feedName, title, desc,
       return;
     }
 
-    // 404 (worker restarted) or 500 (FFmpeg error) — fall back to Vimeo
-    Logger.log(`[${feedSlug}] Compression failed (${code}) — falling back to Vimeo`);
+    // 404 (worker restarted) or 500 (FFmpeg error) - fall back to Vimeo
+    Logger.log(`[${feedSlug}] Compression failed (${code}) - falling back to Vimeo`);
     sheet.getRange(sheetRow, COL_JOB_ID + 1).setValue("");
     const result = postVimeoOrFallback(feedSlug, feedName, title, desc, fbUrl, mediaUrl, vimeoUrl, fbPostDate);
     sheet.getRange(sheetRow, COL_STATUS + 1).setValue(result.status);
@@ -301,11 +301,11 @@ function processCompressingRow(sheet, sheetRow, feedSlug, feedName, title, desc,
 
 /**
  * Shared fallback path used whenever compression is unavailable or fails.
- * Uses the Vimeo URL from col I (written by Script 1) directly — no title search.
+ * Uses the Vimeo URL from col I (written by Script 1) directly - no title search.
  */
 function postVimeoOrFallback(feedSlug, feedName, title, description, fbUrl, mediaUrl, vimeoUrl, fbPostDate) {
   const feed = resolveFeed(feedSlug, feedName);
-  if (!feed) return { status: "FAILED — no feed match" };
+  if (!feed) return { status: "FAILED - no feed match" };
 
   if (vimeoUrl) {
     Logger.log(`[${feedSlug}] Posting Vimeo URL`);
@@ -313,7 +313,7 @@ function postVimeoOrFallback(feedSlug, feedName, title, description, fbUrl, medi
     return { status: `Discord ${code} via Vimeo`, vimeoUrl };
   }
 
-  Logger.log(`[${feedSlug}] No Vimeo URL — posting fallback embed`);
+  Logger.log(`[${feedSlug}] No Vimeo URL - posting fallback embed`);
   const dropboxUrl = (mediaUrl && mediaUrl.includes("dropbox")) ? mediaUrl : null;
   const status = postFallbackEmbed(feed, feedSlug, title, description, fbUrl, dropboxUrl, fbPostDate);
   return { status };
@@ -349,7 +349,7 @@ function retryFailed() {
     }
   }
   SpreadsheetApp.flush();
-  Logger.log(`retryFailed() complete — ${reset} row(s) reset.`);
+  Logger.log(`retryFailed() complete - ${reset} row(s) reset.`);
 }
 
 // ─── TIMESTAMP HELPER ─────────────────────────────────────────────────────────
@@ -367,7 +367,7 @@ function parseFbPostDate(raw) {
     const d = raw instanceof Date ? raw : new Date(raw.toString());
     if (!isNaN(d.getTime())) {
       const unix = Math.floor(d.getTime() / 1000);
-      return `<t:${unix}:f>`;  // Discord relative timestamp — full date+time, user's local TZ
+      return `<t:${unix}:f>`;  // Discord relative timestamp - full date+time, user's local TZ
     }
   } catch (e) {}
   // Fallback: plain string, strip seconds  e.g. "2026-03-13 23:01"
@@ -509,10 +509,10 @@ function fetchVideoUrlFromWorker(fbUrl) {
       const data = JSON.parse(resp.getContentText());
       if (data.url) return data.url;
     }
-    Logger.log(`fetchVideoUrlFromWorker: failed — ${resp.getContentText().substring(0, 200)}`);
+    Logger.log(`fetchVideoUrlFromWorker: failed - ${resp.getContentText().substring(0, 200)}`);
     return null;
   } catch (err) {
-    Logger.log(`fetchVideoUrlFromWorker: exception — ${err}`);
+    Logger.log(`fetchVideoUrlFromWorker: exception - ${err}`);
     return null;
   }
 }
