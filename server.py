@@ -150,7 +150,7 @@ def compress_video(source_url: str) -> tuple:
 
         cmd = [
             "ffmpeg", "-y", "-i", input_path,
-            "-vf", "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease,"
+            "-vf", "scale='min(1440,iw)':'min(900,ih)':force_original_aspect_ratio=decrease,"
                    "scale=trunc(iw/2)*2:trunc(ih/2)*2",
             "-c:v", "libx264", "-crf", "28",
             "-maxrate", f"{video_kbps}k", "-bufsize", f"{video_kbps * 2}k",
