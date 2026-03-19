@@ -35,9 +35,10 @@ Environment variables:
   FB_COOKIES   (optional) Netscape cookie string for logged-in FB Reels
   TARGET_MB    (optional) file size target in MB, default 7
 """
+import os
+os.environ["PATH"] = "/opt/ffmpeg:" + os.environ.get("PATH", "")
 
 import io
-import os
 import json
 import uuid
 import tempfile
