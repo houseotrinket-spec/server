@@ -77,13 +77,32 @@ def setup_cookies():
 
 # ─── /extract ─────────────────────────────────────────────────────────────────
 
-def extract_url(fb_url: str) -> dict:
-    cmd = ["yt-dlp", "--get-url",
-           "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-           "--no-playlist"]
-    if COOKIES_FILE:
-        cmd += ["--cookies", COOKIES_FILE]
-    cmd.append(fb_url)
+def is_youtube_url(url: str) -> bool:
+    return "youtube.com" in url or "youtu.be" in url
+
+
+def extract_url(source_url: str) -> dict:
+    is_yt = is_youtube_url(source_url)
+
+    cmd = ["yt-dlp", "--get-url", "--no-playlist"]
+
+    if is_yt:
+        # Use the Android player client — no JS runtime required.
+        # "android" bypasses YouTube's JS-based signature decryption entirely.
+        cmd += [
+            "--extractor-args", "youtube:player_client=android",
+            "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        ]
+    else:
+        # Facebook / generic — original behaviour
+        cmd += [
+            "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        ]
+        if COOKIES_FILE:
+            cmd += ["--cookies", COOKIES_FILE]
+
+    cmd.append(source_url)
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
