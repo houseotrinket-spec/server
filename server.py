@@ -270,6 +270,29 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "invalid JSON"})
             return
 
+        if self.path == "/rss":
+            # Proxy YouTube RSS feeds — GAS server IPs are intermittently blocked
+            # by YouTube between ~09:00-12:00 UTC, but Render IPs are not.
+            # POST { "url": "https://www.youtube.com/feeds/videos.xml?channel_id=..." }
+            url = data.get("url", "").strip()
+            if not url:
+                self._json(400, {"error": "missing 'url'"}); return
+            print(f"[rss] proxying: {url[:120]}")
+            try:
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": "Mozilla/5.0 (compatible; feedfetcher)"})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    xml_bytes = r.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/xml; charset=utf-8")
+                self.send_header("Content-Length", str(len(xml_bytes)))
+                self.end_headers()
+                self.wfile.write(xml_bytes)
+            except Exception as e:
+                print(f"[rss] fetch failed: {e}")
+                self._json(500, {"error": f"RSS fetch failed: {e}"})
+            return
+
         if self.path == "/extract":
             url = data.get("url", "").strip()
             if not url:
