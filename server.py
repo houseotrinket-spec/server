@@ -101,16 +101,23 @@ def extract_url(source_url: str, extractor_args: str = None) -> dict:
     cmd = ["yt-dlp", "--get-url", "--no-playlist"]
 
     if is_yt:
-        # Use caller-supplied extractor_args, or default to android client.
-        # android bypasses the JS runtime requirement; web_creator is a fallback
-        # for videos that android can't access (age-gated / "sign in to confirm").
-        args = extractor_args or "youtube:player_client=android,web_creator"
-        cmd += [
-            "--extractor-args", args,
-            "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        ]
+        # Client selection strategy:
+        #   WITH cookies → use "web" client (supports cookies, solves signature)
+        #   WITHOUT cookies → use "android" (no JS runtime needed, but no cookie support)
+        #   "web_creator" is a fallback that also supports cookies and avoids bot checks
         if YT_COOKIES_FILE:
-            cmd += ["--cookies", YT_COOKIES_FILE]
+            args = extractor_args or "youtube:player_client=web,web_creator"
+            cmd += [
+                "--extractor-args", args,
+                "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "--cookies", YT_COOKIES_FILE
+            ]
+        else:
+            args = extractor_args or "youtube:player_client=android,web_creator"
+            cmd += [
+                "--extractor-args", args,
+                "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            ]
     else:
         # Facebook / generic — original behaviour
         cmd += [
