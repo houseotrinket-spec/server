@@ -81,16 +81,18 @@ def is_youtube_url(url: str) -> bool:
     return "youtube.com" in url or "youtu.be" in url
 
 
-def extract_url(source_url: str) -> dict:
+def extract_url(source_url: str, extractor_args: str = None) -> dict:
     is_yt = is_youtube_url(source_url)
 
     cmd = ["yt-dlp", "--get-url", "--no-playlist"]
 
     if is_yt:
-        # Use the Android player client — no JS runtime required.
-        # "android" bypasses YouTube's JS-based signature decryption entirely.
+        # Use caller-supplied extractor_args, or default to android client.
+        # android bypasses the JS runtime requirement; web_creator is a fallback
+        # for videos that android can't access (age-gated / "sign in to confirm").
+        args = extractor_args or "youtube:player_client=android,web_creator"
         cmd += [
-            "--extractor-args", "youtube:player_client=android",
+            "--extractor-args", args,
             "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         ]
     else:
@@ -272,8 +274,9 @@ class Handler(BaseHTTPRequestHandler):
             url = data.get("url", "").strip()
             if not url:
                 self._json(400, {"error": "missing 'url'"}); return
+            extractor_args = data.get("extractor_args", None)
             print(f"[extract] {url[:100]}")
-            result = extract_url(url)
+            result = extract_url(url, extractor_args)
             self._json(200 if "url" in result else 500, result)
 
         elif self.path == "/compress/start":
