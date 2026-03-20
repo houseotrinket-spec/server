@@ -33,6 +33,7 @@ Deploy on Render (free tier, Web Service, Python):
 
 Environment variables:
   FB_COOKIES   (optional) Netscape cookie string for logged-in FB Reels
+  YT_COOKIES   (optional) Netscape cookie string for logged-in YouTube account
   TARGET_MB    (optional) file size target in MB, default 7
 """
 import os
@@ -45,12 +46,14 @@ import tempfile
 import threading
 import subprocess
 import urllib.request
+import urllib.error
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 PORT         = int(os.environ.get("PORT", 8080))
 TARGET_MB    = float(os.environ.get("TARGET_MB", "7"))
 TARGET_BYTES = int(TARGET_MB * 1024 * 1024)
-COOKIES_FILE = None
+COOKIES_FILE    = None   # Facebook cookies
+YT_COOKIES_FILE = None   # YouTube cookies
 
 # ── In-memory job store ───────────────────────────────────────────────────────
 # { job_id: { "status": "processing"|"done"|"error",
@@ -63,16 +66,27 @@ JOBS_LOCK = threading.Lock()
 # ─── STARTUP ──────────────────────────────────────────────────────────────────
 
 def setup_cookies():
-    global COOKIES_FILE
-    cookies_env = os.environ.get("FB_COOKIES", "").strip()
-    if cookies_env:
+    global COOKIES_FILE, YT_COOKIES_FILE
+
+    fb_cookies = os.environ.get("FB_COOKIES", "").strip()
+    if fb_cookies:
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
-        tmp.write(cookies_env)
+        tmp.write(fb_cookies)
         tmp.close()
         COOKIES_FILE = tmp.name
-        print(f"[startup] Cookies written to {COOKIES_FILE}")
+        print(f"[startup] FB cookies written to {COOKIES_FILE}")
     else:
         print("[startup] No FB_COOKIES — Reels may fail without login")
+
+    yt_cookies = os.environ.get("YT_COOKIES", "").strip()
+    if yt_cookies:
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+        tmp.write(yt_cookies)
+        tmp.close()
+        YT_COOKIES_FILE = tmp.name
+        print(f"[startup] YT cookies written to {YT_COOKIES_FILE}")
+    else:
+        print("[startup] No YT_COOKIES — YouTube bot-check videos will fail")
 
 
 # ─── /extract ─────────────────────────────────────────────────────────────────
@@ -95,6 +109,8 @@ def extract_url(source_url: str, extractor_args: str = None) -> dict:
             "--extractor-args", args,
             "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         ]
+        if YT_COOKIES_FILE:
+            cmd += ["--cookies", YT_COOKIES_FILE]
     else:
         # Facebook / generic — original behaviour
         cmd += [
@@ -279,18 +295,28 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": "missing 'url'"}); return
             print(f"[rss] proxying: {url[:120]}")
             try:
-                req = urllib.request.Request(
-                    url, headers={"User-Agent": "Mozilla/5.0 (compatible; feedfetcher)"})
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "application/atom+xml,application/xml,text/xml,*/*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                })
                 with urllib.request.urlopen(req, timeout=15) as r:
                     xml_bytes = r.read()
+                    status = r.status
+                print(f"[rss] upstream status: {status}, bytes: {len(xml_bytes)}")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/xml; charset=utf-8")
                 self.send_header("Content-Length", str(len(xml_bytes)))
                 self.end_headers()
                 self.wfile.write(xml_bytes)
+            except urllib.error.HTTPError as e:
+                body = e.read()[:300].decode("utf-8", errors="replace")
+                print(f"[rss] HTTP error {e.code} from upstream: {body}")
+                self._json(e.code if e.code in (400, 401, 403, 404, 429, 503) else 502,
+                           {"error": f"upstream {e.code}: {body}"})
             except Exception as e:
                 print(f"[rss] fetch failed: {e}")
-                self._json(500, {"error": f"RSS fetch failed: {e}"})
+                self._json(502, {"error": f"RSS fetch failed: {e}"})
             return
 
         if self.path == "/extract":
