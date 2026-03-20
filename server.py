@@ -38,6 +38,7 @@ Environment variables:
 """
 import os
 os.environ["PATH"] = "/opt/ffmpeg:" + os.environ.get("PATH", "")
+os.environ["PYTHONUNBUFFERED"] = "1"  # force stdout flush so Render logs show print() output
 
 import io
 import json
