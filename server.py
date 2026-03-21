@@ -327,6 +327,32 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(502, {"error": f"RSS fetch failed: {e}"})
             return
 
+        if self.path == "/setcookies":
+            # One-time endpoint to push YouTube cookies to the running server.
+            # POST { "cookies": "<netscape cookies.txt content>", "type": "yt" }
+            # This writes to YT_COOKIES_FILE at runtime — no Render env var needed.
+            cookie_text = data.get("cookies", "").strip()
+            cookie_type = data.get("type", "yt").strip().lower()
+            if not cookie_text:
+                self._json(400, {"error": "missing 'cookies'"}); return
+            try:
+                import tempfile
+                tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+                tmp.write(cookie_text)
+                tmp.close()
+                if cookie_type == "fb":
+                    global COOKIES_FILE
+                    COOKIES_FILE = tmp.name
+                    print(f"[setcookies] FB cookies updated: {tmp.name}")
+                else:
+                    global YT_COOKIES_FILE
+                    YT_COOKIES_FILE = tmp.name
+                    print(f"[setcookies] YT cookies updated: {tmp.name}")
+                self._json(200, {"status": "ok", "type": cookie_type, "path": tmp.name})
+            except Exception as e:
+                self._json(500, {"error": str(e)})
+            return
+
         if self.path == "/extract":
             url = data.get("url", "").strip()
             if not url:
