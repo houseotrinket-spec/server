@@ -33,12 +33,11 @@ Deploy on Render (free tier, Web Service, Python):
 
 Environment variables:
   FB_COOKIES   (optional) Netscape cookie string for logged-in FB Reels
-  YT_COOKIES   (optional) Netscape cookie string for logged-in YouTube account
   TARGET_MB    (optional) file size target in MB, default 7
 """
 import os
 os.environ["PATH"] = "/opt/ffmpeg:" + os.environ.get("PATH", "")
-os.environ["PYTHONUNBUFFERED"] = "1"  # force stdout flush so Render logs show print() output
+os.environ["PYTHONUNBUFFERED"] = "1"
 
 import io
 import json
@@ -53,8 +52,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 PORT         = int(os.environ.get("PORT", 8080))
 TARGET_MB    = float(os.environ.get("TARGET_MB", "7"))
 TARGET_BYTES = int(TARGET_MB * 1024 * 1024)
-# Mutable container so class methods can update these without global keyword issues
-COOKIE_FILES = {"fb": None, "yt": None}
+COOKIE_FILES = {'fb': None, 'yt': None}  # mutable dict — safe to update from handler methods
 
 # ── In-memory job store ───────────────────────────────────────────────────────
 # { job_id: { "status": "processing"|"done"|"error",
@@ -67,68 +65,47 @@ JOBS_LOCK = threading.Lock()
 # ─── STARTUP ──────────────────────────────────────────────────────────────────
 
 def setup_cookies():
-    # COOKIE_FILES dict is module-level mutable — no global declaration needed
-
-    fb_cookies = os.environ.get("FB_COOKIES", "").strip()
-    if fb_cookies:
+    fb = os.environ.get("FB_COOKIES", "").strip()
+    if fb:
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
-        tmp.write(fb_cookies)
-        tmp.close()
+        tmp.write(fb); tmp.close()
         COOKIE_FILES["fb"] = tmp.name
         print(f"[startup] FB cookies written to {COOKIE_FILES['fb']}")
     else:
         print("[startup] No FB_COOKIES — Reels may fail without login")
-
-    yt_cookies = os.environ.get("YT_COOKIES", "").strip()
-    if yt_cookies:
+    yt = os.environ.get("YT_COOKIES", "").strip()
+    if yt:
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
-        tmp.write(yt_cookies)
-        tmp.close()
+        tmp.write(yt); tmp.close()
         COOKIE_FILES["yt"] = tmp.name
         print(f"[startup] YT cookies written to {COOKIE_FILES['yt']}")
     else:
-        print("[startup] No YT_COOKIES — will rely on /setcookies endpoint")
+        print("[startup] No YT_COOKIES — use /setcookies endpoint")
 
 
 # ─── /extract ─────────────────────────────────────────────────────────────────
 
-def is_youtube_url(url: str) -> bool:
+def is_youtube_url(url):
     return "youtube.com" in url or "youtu.be" in url
 
-
-def extract_url(source_url: str, extractor_args: str = None) -> dict:
+def extract_url(source_url, extractor_args=None):
     is_yt = is_youtube_url(source_url)
-
     cmd = ["yt-dlp", "--get-url", "--no-playlist"]
-
     if is_yt:
-        # Client selection strategy:
-        #   WITH cookies → use "web" client (supports cookies, solves signature)
-        #   WITHOUT cookies → use "android" (no JS runtime needed, but no cookie support)
-        #   "web_creator" is a fallback that also supports cookies and avoids bot checks
         if COOKIE_FILES["yt"]:
             args = extractor_args or "youtube:player_client=web,web_creator"
-            cmd += [
-                "--extractor-args", args,
-                "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "--cookies", COOKIE_FILES["yt"]
-            ]
+            cmd += ["--extractor-args", args,
+                    "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                    "--cookies", COOKIE_FILES["yt"]]
         else:
             args = extractor_args or "youtube:player_client=android,web_creator"
-            cmd += [
-                "--extractor-args", args,
-                "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            ]
+            cmd += ["--extractor-args", args,
+                    "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best"]
     else:
-        # Facebook / generic — original behaviour
-        cmd += [
-            "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        ]
+        cmd += ["--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"]
         if COOKIE_FILES["fb"]:
             cmd += ["--cookies", COOKIE_FILES["fb"]]
-
     cmd.append(source_url)
-
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
@@ -295,9 +272,6 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/rss":
-            # Proxy YouTube RSS feeds — GAS server IPs are intermittently blocked
-            # by YouTube between ~09:00-12:00 UTC, but Render IPs are not.
-            # POST { "url": "https://www.youtube.com/feeds/videos.xml?channel_id=..." }
             url = data.get("url", "").strip()
             if not url:
                 self._json(400, {"error": "missing 'url'"}); return
@@ -310,43 +284,32 @@ class Handler(BaseHTTPRequestHandler):
                 })
                 with urllib.request.urlopen(req, timeout=15) as r:
                     xml_bytes = r.read()
-                    status = r.status
-                print(f"[rss] upstream status: {status}, bytes: {len(xml_bytes)}")
+                print(f"[rss] got {len(xml_bytes)} bytes")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/xml; charset=utf-8")
                 self.send_header("Content-Length", str(len(xml_bytes)))
                 self.end_headers()
                 self.wfile.write(xml_bytes)
             except urllib.error.HTTPError as e:
-                body = e.read()[:300].decode("utf-8", errors="replace")
-                print(f"[rss] HTTP error {e.code} from upstream: {body}")
-                self._json(e.code if e.code in (400, 401, 403, 404, 429, 503) else 502,
-                           {"error": f"upstream {e.code}: {body}"})
+                body_err = e.read()[:300].decode("utf-8", errors="replace")
+                print(f"[rss] HTTP {e.code}: {body_err}")
+                self._json(e.code if e.code in (400,401,403,404,429,503) else 502, {"error": f"upstream {e.code}"})
             except Exception as e:
-                print(f"[rss] fetch failed: {e}")
-                self._json(502, {"error": f"RSS fetch failed: {e}"})
+                print(f"[rss] failed: {e}")
+                self._json(502, {"error": str(e)})
             return
 
         if self.path == "/setcookies":
-            # One-time endpoint to push YouTube cookies to the running server.
-            # POST { "cookies": "<netscape cookies.txt content>", "type": "yt" }
-            # This writes to COOKIE_FILES['yt'] at runtime — no Render env var needed.
             cookie_text = data.get("cookies", "").strip()
             cookie_type = data.get("type", "yt").strip().lower()
             if not cookie_text:
                 self._json(400, {"error": "missing 'cookies'"}); return
             try:
-                import tempfile
                 tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
-                tmp.write(cookie_text)
-                tmp.close()
-                if cookie_type == "fb":
-                    COOKIE_FILES["fb"] = tmp.name
-                    print(f"[setcookies] FB cookies updated: {tmp.name}")
-                else:
-                    COOKIE_FILES["yt"] = tmp.name
-                    print(f"[setcookies] YT cookies updated: {tmp.name} — yt-dlp will now use web client")
-                self._json(200, {"status": "ok", "type": cookie_type, "path": tmp.name})
+                tmp.write(cookie_text); tmp.close()
+                COOKIE_FILES[cookie_type if cookie_type in ("fb","yt") else "yt"] = tmp.name
+                print(f"[setcookies] {cookie_type.upper()} cookies updated: {tmp.name}")
+                self._json(200, {"status": "ok", "type": cookie_type})
             except Exception as e:
                 self._json(500, {"error": str(e)})
             return
