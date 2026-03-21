@@ -53,8 +53,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 PORT         = int(os.environ.get("PORT", 8080))
 TARGET_MB    = float(os.environ.get("TARGET_MB", "7"))
 TARGET_BYTES = int(TARGET_MB * 1024 * 1024)
-COOKIES_FILE    = None   # Facebook cookies
-YT_COOKIES_FILE = None   # YouTube cookies
+# Mutable container so class methods can update these without global keyword issues
+COOKIE_FILES = {"fb": None, "yt": None}
 
 # ── In-memory job store ───────────────────────────────────────────────────────
 # { job_id: { "status": "processing"|"done"|"error",
@@ -67,15 +67,15 @@ JOBS_LOCK = threading.Lock()
 # ─── STARTUP ──────────────────────────────────────────────────────────────────
 
 def setup_cookies():
-    global COOKIES_FILE, YT_COOKIES_FILE
+    # COOKIE_FILES dict is module-level mutable — no global declaration needed
 
     fb_cookies = os.environ.get("FB_COOKIES", "").strip()
     if fb_cookies:
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
         tmp.write(fb_cookies)
         tmp.close()
-        COOKIES_FILE = tmp.name
-        print(f"[startup] FB cookies written to {COOKIES_FILE}")
+        COOKIE_FILES["fb"] = tmp.name
+        print(f"[startup] FB cookies written to {COOKIE_FILES['fb']}")
     else:
         print("[startup] No FB_COOKIES — Reels may fail without login")
 
@@ -84,10 +84,10 @@ def setup_cookies():
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
         tmp.write(yt_cookies)
         tmp.close()
-        YT_COOKIES_FILE = tmp.name
-        print(f"[startup] YT cookies written to {YT_COOKIES_FILE}")
+        COOKIE_FILES["yt"] = tmp.name
+        print(f"[startup] YT cookies written to {COOKIE_FILES['yt']}")
     else:
-        print("[startup] No YT_COOKIES — YouTube bot-check videos will fail")
+        print("[startup] No YT_COOKIES — will rely on /setcookies endpoint")
 
 
 # ─── /extract ─────────────────────────────────────────────────────────────────
@@ -106,12 +106,12 @@ def extract_url(source_url: str, extractor_args: str = None) -> dict:
         #   WITH cookies → use "web" client (supports cookies, solves signature)
         #   WITHOUT cookies → use "android" (no JS runtime needed, but no cookie support)
         #   "web_creator" is a fallback that also supports cookies and avoids bot checks
-        if YT_COOKIES_FILE:
+        if COOKIE_FILES["yt"]:
             args = extractor_args or "youtube:player_client=web,web_creator"
             cmd += [
                 "--extractor-args", args,
                 "--format", "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "--cookies", YT_COOKIES_FILE
+                "--cookies", COOKIE_FILES["yt"]
             ]
         else:
             args = extractor_args or "youtube:player_client=android,web_creator"
@@ -124,8 +124,8 @@ def extract_url(source_url: str, extractor_args: str = None) -> dict:
         cmd += [
             "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         ]
-        if COOKIES_FILE:
-            cmd += ["--cookies", COOKIES_FILE]
+        if COOKIE_FILES["fb"]:
+            cmd += ["--cookies", COOKIE_FILES["fb"]]
 
     cmd.append(source_url)
 
@@ -330,7 +330,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/setcookies":
             # One-time endpoint to push YouTube cookies to the running server.
             # POST { "cookies": "<netscape cookies.txt content>", "type": "yt" }
-            # This writes to YT_COOKIES_FILE at runtime — no Render env var needed.
+            # This writes to COOKIE_FILES['yt'] at runtime — no Render env var needed.
             cookie_text = data.get("cookies", "").strip()
             cookie_type = data.get("type", "yt").strip().lower()
             if not cookie_text:
@@ -341,13 +341,11 @@ class Handler(BaseHTTPRequestHandler):
                 tmp.write(cookie_text)
                 tmp.close()
                 if cookie_type == "fb":
-                    global COOKIES_FILE
-                    COOKIES_FILE = tmp.name
+                    COOKIE_FILES["fb"] = tmp.name
                     print(f"[setcookies] FB cookies updated: {tmp.name}")
                 else:
-                    global YT_COOKIES_FILE
-                    YT_COOKIES_FILE = tmp.name
-                    print(f"[setcookies] YT cookies updated: {tmp.name}")
+                    COOKIE_FILES["yt"] = tmp.name
+                    print(f"[setcookies] YT cookies updated: {tmp.name} — yt-dlp will now use web client")
                 self._json(200, {"status": "ok", "type": cookie_type, "path": tmp.name})
             except Exception as e:
                 self._json(500, {"error": str(e)})
